@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#c084fc">
+<title>Vitamin Tracker</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: linear-gradient(180deg, #fff7ed 0%, #faf5ff 50%, #f0fdf4 100%);
+    margin: 0;
+    padding: 16px;
+    color: #1e293b;
+    min-height: 100vh;
+  }
+  .container { max-width: 480px; margin: 0 auto; }
+  h1 { font-size: 28px; margin: 0 0 4px; font-weight: 700; color: #6b21a8; }
+  .date { color: #7c3aed; margin-bottom: 16px; font-size: 15px; }
+  .tabs { display: flex; gap: 6px; margin-bottom: 16px; }
+  .tab {
+    flex: 1; padding: 10px 6px; border: none; border-radius: 12px;
+    background: rgba(255,255,255,0.7); font-weight: 600; font-size: 14px; cursor: pointer;
+    color: #6b21a8;
+  }
+  .tab.active { background: #a855f7; color: white; }
+  .group-header {
+    font-size: 13px; font-weight: 700; letter-spacing: 0.5px; margin: 20px 0 8px;
+    padding: 6px 12px; border-radius: 10px; display: inline-block;
+  }
+  .morning { background: #fef3c7; color: #92400e; }
+  .afternoon { background: #e0e7ff; color: #3730a3; }
+  .evening { background: #fce7f3; color: #9d174d; }
+  .pill-card {
+    background: white; border-radius: 18px; padding: 16px; margin-bottom: 12px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.05); border-left: 4px solid #e9d5ff;
+  }
+  .pill-card.closing { border-left-color: #fb923c; background: #fff7ed; }
+  .pill-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
+  .pill-name { font-size: 18px; font-weight: 700; margin: 0; }
+  .pill-meta { font-size: 13px; color: #64748b; margin: 2px 0 0; }
+  .doses { display: flex; gap: 8px; flex-wrap: wrap; }
+  .dose-btn {
+    flex: 1; min-width: 90px; background: #22c55e; color: white; border: none;
+    border-radius: 12px; padding: 12px 6px; font-size: 14px; font-weight: 600; cursor: pointer;
+  }
+  .dose-taken {
+    flex: 1; min-width: 90px; background: #dcfce7; color: #166534;
+    border-radius: 12px; padding: 12px 6px; font-size: 13px; font-weight: 600; text-align: center; cursor: pointer;
+  }
+  .dose-taken small { display: block; font-size: 11px; opacity: 0.8; }
+  .total { margin-top: 8px; font-weight: 600; color: #166534; font-size: 14px; }
+  .section-title { font-size: 13px; font-weight: 700; color: #7c3aed; margin: 24px 0 8px; }
+  .history-item {
+    background: white; border-radius: 12px; padding: 12px 14px; margin-bottom: 6px;
+    font-size: 14px; display: flex; justify-content: space-between;
+  }
+  .empty { color: #94a3b8; text-align: center; padding: 20px; }
+  .view { display: none; }
+  .view.active { display: block; }
+  .manage-btn, .add-btn {
+    width: 100%; background: #a855f7; color: white; border: none; border-radius: 14px;
+    padding: 14px; font-size: 16px; font-weight: 600; margin: 8px 0; cursor: pointer;
+  }
+  .modal {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4);
+    align-items: center; justify-content: center; z-index: 100;
+  }
+  .modal.open { display: flex; }
+  .modal-content {
+    background: white; border-radius: 20px; padding: 20px; width: 90%; max-width: 400px; max-height: 80vh; overflow-y: auto;
+  }
+  .modal-content h3 { margin: 0 0 16px; color: #6b21a8; }
+  .field { margin-bottom: 12px; }
+  .field label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px; color: #475569; }
+  .field input, .field select {
+    width: 100%; padding: 10px; border-radius: 10px; border: 1px solid #e2e8f0; font-size: 15px;
+  }
+  .btn-row { display: flex; gap: 8px; margin-top: 16px; }
+  .btn-row button { flex: 1; padding: 12px; border: none; border-radius: 12px; font-weight: 600; cursor: pointer; }
+  .btn-save { background: #22c55e; color: white; }
+  .btn-cancel { background: #e2e8f0; }
+  .btn-delete { background: #f87171; color: white; margin-top: 8px; width: 100%; padding: 10px; border: none; border-radius: 10px; }
+  .adherence { background: white; border-radius: 14px; padding: 12px; margin-bottom: 12px; font-weight: 600; color: #6b21a8; text-align: center; }
+  .all-done { text-align: center; padding: 30px; color: #16a34a; font-size: 18px; font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Vitamin Tracker</h1>
+  <div class="date" id="dateDisplay"></div>
+  <div class="tabs">
+    <button class="tab active" onclick="showView('today')">Today</button>
+    <button class="tab" onclick="showView('week')">Week</button>
+    <button class="tab" onclick="showView('month')">Month</button>
+    <button class="tab" onclick="showView('manage')">Manage</button>
+  </div>
+
+  <div id="view-today" class="view active">
+    <div id="adherence" class="adherence"></div>
+    <div id="todayContent"></div>
+  </div>
+  <div id="view-week" class="view"><div id="weekLog"></div></div>
+  <div id="view-month" class="view"><div id="monthLog"></div></div>
+  <div id="view-manage" class="view">
+    <button class="add-btn" onclick="openEdit()">+ Add Vitamin</button>
+    <div id="manageList"></div>
+  </div>
+</div>
+
+<div id="editModal" class="modal">
+  <div class="modal-content">
+    <h3 id="modalTitle">Add Vitamin</h3>
+    <div class="field"><label>Name</label><input id="editName" type="text"></div>
+    <div class="field">
+      <label>Type</label>
+      <select id="editType" onchange="toggleDosageFields()">
+        <option value="pill">Pill (count only)</option>
+        <option value="weight">Powder / Weight (mg or g)</option>
+      </select>
+    </div>
+    <div class="field"><label>Times per day</label><input id="editDoses" type="number" min="1" max="6" value="1"></div>
+    <div id="dosageFields" style="display:none">
+      <div class="field"><label>Amount per dose</label><input id="editAmount" type="number" min="1" step="1" value="300"></div>
+      <div class="field">
+        <label>Unit</label>
+        <select id="editUnit"><option value="mg">mg</option><option value="g">g</option></select>
+      </div>
+    </div>
+    <div class="field"><label>Time group</label>
+      <select id="editGroup">
+        <option value="morning">Morning</option>
+        <option value="afternoon">Afternoon</option>
+        <option value="evening">Evening</option>
+        <option value="any">Any time</option>
+      </select>
+    </div>
+    <div class="field"><label>Window end hour (optional, 0-23)</label><input id="editWindow" type="number" min="0" max="23" placeholder="e.g. 16"></div>
+    <div class="btn-row">
+      <button class="btn-cancel" onclick="closeEdit()">Cancel</button>
+      <button class="btn-save" onclick="saveVitamin()">Save</button>
+    </div>
+    <button id="deleteBtn" class="btn-delete" style="display:none" onclick="deleteVitamin()">Delete</button>
+  </div>
+</div>
+
+<script>
+let vitamins = JSON.parse(localStorage.getItem("vitamins") || "null") || [
+  { id: "mag", name: "Magnesium", type: "pill", doses: 3, group: "any", windowEnd: null },
+  { id: "ino", name: "Inositol (B8)", type: "weight", doses: 3, amount: 300, unit: "mg", group: "any", windowEnd: null },
+  { id: "bic", name: "Bicalina", type: "pill", doses: 1, group: "evening", windowEnd: 20 },
+  { id: "omg", name: "Omega-3", type: "pill", doses: 2, group: "afternoon", windowEnd: 16, note: "With fatty food • Include Vit D & K" }
+];
+let editingId = null;
+
+function saveVitamins() { localStorage.setItem("vitamins", JSON.stringify(vitamins)); }
+function getTodayKey() { return new Date().toISOString().slice(0, 10); }
+function loadData(key = getTodayKey()) {
+  try { return JSON.parse(localStorage.getItem("log_" + key)) || {}; } catch { return {}; }
+}
+function saveData(data, key = getTodayKey()) { localStorage.setItem("log_" + key, JSON.stringify(data)); }
+function loadHistory() {
+  try { return JSON.parse(localStorage.getItem("history")) || []; } catch { return []; }
+}
+function addHistory(entry) {
+  let h = loadHistory();
+  h.unshift(entry);
+  localStorage.setItem("history", JSON.stringify(h.slice(0, 300)));
+}
+
+function showView(name) {
+  document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
+  document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+  document.getElementById("view-" + name).classList.add("active");
+  event.target.classList.add("active");
+  if (name === "week") renderWeek();
+  if (name === "month") renderMonth();
+  if (name === "manage") renderManage();
+  if (name === "today") renderToday();
+}
+
+function getGroup(v) {
+  if (v.group && v.group !== "any") return v.group;
+  if (v.windowEnd) {
+    if (v.windowEnd <= 12) return "morning";
+    if (v.windowEnd <= 17) return "afternoon";
+    return "evening";
+  }
+  return "any";
+}
+
+function renderToday() {
+  const data = loadData();
+  const groups = { morning: [], afternoon: [], evening: [], any: [] };
+  vitamins.forEach(v => groups[getGroup(v)].push(v));
+
+  let html = "";
+  let totalPossible = 0, totalTaken = 0;
+  const now = new Date();
+  const hour = now.getHours();
+
+  ["morning", "afternoon", "evening", "any"].forEach(g => {
+    if (groups[g].length === 0) return;
+    const label = g === "any" ? "ANY TIME" : g.toUpperCase();
+    html += `<div class="group-header ${g}">${label}</div>`;
+    groups[g].forEach(v => {
+      const taken = data[v.id] || [];
+      const takenCount = taken.filter(Boolean).length;
+      totalPossible += v.doses;
+      totalTaken += takenCount;
+      const closing = v.windowEnd && (v.windowEnd * 60 - (hour * 60 + now.getMinutes())) > 0 && (v.windowEnd * 60 - (hour * 60 + now.getMinutes())) <= 45 && takenCount < v.doses;
+      html += `<div class="pill-card ${closing ? "closing" : ""}">
+        <div class="pill-header">
+          <div>
+            <div class="pill-name">${v.name}</div>
+            <div class="pill-meta">${v.doses}× per day${v.note ? " • " + v.note : ""}${closing ? " • window closing soon" : ""}</div>
+          </div>
+        </div>
+        <div class="doses" id="doses-${v.id}"></div>
+        ${v.type === "weight" ? `<div class="total" id="total-${v.id}"></div>` : ""}
+      </div>`;
+    });
+  });
+
+  if (totalTaken === totalPossible && totalPossible > 0) {
+    html = `<div class="all-done">All done for today ✓</div>` + html;
+  }
+  document.getElementById("todayContent").innerHTML = html;
+  document.getElementById("adherence").textContent = `Today: ${totalTaken} / ${totalPossible} doses`;
+
+  vitamins.forEach(v => {
+    const taken = data[v.id] || [];
+    const div = document.getElementById("doses-" + v.id);
+    if (!div) return;
+    for (let i = 0; i < v.doses; i++) {
+      const t = taken[i];
+      if (t) {
+        const el = document.createElement("div");
+        el.className = "dose-taken";
+        el.innerHTML = `Taken<small>${t}</small><small>tap to undo</small>`;
+        el.onclick = () => undo(v.id, i);
+        div.appendChild(el);
+      } else {
+        const btn = document.createElement("button");
+        btn.className = "dose-btn";
+        btn.textContent = "Taken";
+        btn.onclick = () => mark(v.id, i);
+        div.appendChild(btn);
+      }
+    }
+    if (v.type === "weight") {
+      const count = taken.filter(Boolean).length;
+      let grams = 0;
+      if (v.unit === "mg") grams = (count * v.amount) / 1000;
+      else grams = count * v.amount;
+      const tel = document.getElementById("total-" + v.id);
+      if (tel) tel.textContent = `Taken ${count}× → Total: ${grams.toFixed(2)} g`;
+    }
+  });
+}
+
+function mark(id, idx) {
+  const data = loadData();
+  if (!data[id]) data[id] = [];
+  const time = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  data[id][idx] = time;
+  saveData(data);
+  const v = vitamins.find(x => x.id === id);
+  addHistory({ id, name: v.name, dose: idx + 1, time, date: getTodayKey() });
+  renderToday();
+}
+
+function undo(id, idx) {
+  const data = loadData();
+  if (data[id]) {
+    data[id][idx] = null;
+    data[id] = data[id].filter(Boolean);
+    if (!data[id].length) delete data[id];
+    saveData(data);
+  }
+  let h = loadHistory().filter(x => !(x.date === getTodayKey() && x.id === id && x.dose === idx + 1));
+  localStorage.setItem("history", JSON.stringify(h));
+  renderToday();
+}
+
+function renderManage() {
+  const el = document.getElementById("manageList");
+  el.innerHTML = vitamins.map(v => `
+    <div class="pill-card" onclick="openEdit('${v.id}')" style="cursor:pointer">
+      <div class="pill-name">${v.name}</div>
+      <div class="pill-meta">${v.type === "pill" ? "Pill" : v.amount + " " + v.unit} • ${v.doses}× • ${getGroup(v)}</div>
+    </div>
+  `).join("") || '<div class="empty">No vitamins yet</div>';
+}
+
+function openEdit(id) {
+  editingId = id || null;
+  const m = document.getElementById("editModal");
+  document.getElementById("modalTitle").textContent = id ? "Edit Vitamin" : "Add Vitamin";
+  document.getElementById("deleteBtn").style.display = id ? "block" : "none";
+  if (id) {
+    const v = vitamins.find(x => x.id === id);
+    document.getElementById("editName").value = v.name;
+    document.getElementById("editType").value = v.type;
+    document.getElementById("editDoses").value = v.doses;
+    document.getElementById("editAmount").value = v.amount || 300;
+    document.getElementById("editUnit").value = v.unit || "mg";
+    document.getElementById("editGroup").value = v.group || "any";
+    document.getElementById("editWindow").value = v.windowEnd || "";
+  } else {
+    document.getElementById("editName").value = "";
+    document.getElementById("editType").value = "pill";
+    document.getElementById("editDoses").value = 1;
+    document.getElementById("editWindow").value = "";
+  }
+  toggleDosageFields();
+  m.classList.add("open");
+}
+function closeEdit() { document.getElementById("editModal").classList.remove("open"); }
+function toggleDosageFields() {
+  document.getElementById("dosageFields").style.display = document.getElementById("editType").value === "weight" ? "block" : "none";
+}
+function saveVitamin() {
+  const name = document.getElementById("editName").value.trim();
+  if (!name) return alert("Name required");
+  const type = document.getElementById("editType").value;
+  const doses = parseInt(document.getElementById("editDoses").value) || 1;
+  const group = document.getElementById("editGroup").value;
+  const windowEnd = document.getElementById("editWindow").value ? parseInt(document.getElementById("editWindow").value) : null;
+  let v = { id: editingId || Date.now().toString(), name, type, doses, group, windowEnd };
+  if (type === "weight") {
+    v.amount = parseFloat(document.getElementById("editAmount").value) || 300;
+    v.unit = document.getElementById("editUnit").value;
+  }
+  if (editingId) {
+    const idx = vitamins.findIndex(x => x.id === editingId);
+    vitamins[idx] = v;
+  } else vitamins.push(v);
+  saveVitamins();
+  closeEdit();
+  renderManage();
+  renderToday();
+}
+function deleteVitamin() {
+  if (!confirm("Delete this vitamin?")) return;
+  vitamins = vitamins.filter(x => x.id !== editingId);
+  saveVitamins();
+  closeEdit();
+  renderManage();
+  renderToday();
+}
+
+function getDateRange(n) {
+  const arr = [];
+  for (let i = 0; i < n; i++) {
+    const d = new Date(); d.setDate(d.getDate() - i);
+    arr.push(d.toISOString().slice(0, 10));
+  }
+  return arr;
+}
+function renderWeek() {
+  const dates = getDateRange(7);
+  const h = loadHistory();
+  let html = "";
+  dates.forEach(date => {
+    const day = h.filter(x => x.date === date);
+    const label = new Date(date).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+    html += `<div class="section-title">${label}</div>`;
+    html += day.length ? day.map(x => `<div class="history-item"><span>${x.name} (${x.dose})</span><span>${x.time}</span></div>`).join("") : '<div class="empty">—</div>';
+  });
+  document.getElementById("weekLog").innerHTML = html;
+}
+function renderMonth() {
+  const dates = getDateRange(30);
+  const h = loadHistory();
+  let html = "";
+  dates.forEach(date => {
+    const day = h.filter(x => x.date === date);
+    if (!day.length) return;
+    const label = new Date(date).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    html += `<div class="section-title">${label}</div>` + day.map(x => `<div class="history-item"><span>${x.name}</span><span>${x.time}</span></div>`).join("");
+  });
+  document.getElementById("monthLog").innerHTML = html || '<div class="empty">No history</div>';
+}
+
+function checkReminders() {
+  if (!("Notification" in window) || Notification.permission !== "granted") return;
+  const now = new Date();
+  const mins = now.getHours() * 60 + now.getMinutes();
+  const data = loadData();
+  vitamins.forEach(v => {
+    if (!v.windowEnd) return;
+    const left = v.windowEnd * 60 - mins;
+    if (left > 0 && left <= 30) {
+      const taken = (data[v.id] || []).filter(Boolean).length;
+      if (taken < v.doses) {
+        new Notification(v.name, { body: "About 30 min left in the window" });
+      }
+    }
+  });
+}
+if ("Notification" in window && Notification.permission === "default") Notification.requestPermission();
+setInterval(checkReminders, 60000);
+
+document.getElementById("dateDisplay").textContent = new Date().toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
+renderToday();
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+</script>
+</body>
+</html>
