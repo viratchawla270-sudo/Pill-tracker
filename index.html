@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#22c55e">
+<title>Vitamin Tracker</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #f8fafc;
+    margin: 0;
+    padding: 20px 16px;
+    color: #0f172a;
+  }
+  .container { max-width: 480px; margin: 0 auto; }
+  h1 { font-size: 32px; margin: 0 0 6px; font-weight: 700; }
+  .date { color: #64748b; margin-bottom: 20px; font-size: 17px; }
+  .tabs { display: flex; gap: 8px; margin-bottom: 20px; }
+  .tab {
+    flex: 1;
+    padding: 10px;
+    border: none;
+    border-radius: 12px;
+    background: #e2e8f0;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .tab.active { background: #22c55e; color: white; }
+  .pill-card {
+    background: white;
+    border-radius: 20px;
+    padding: 20px;
+    margin-bottom: 16px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  }
+  .pill-header { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 16px; }
+  .pill-icon {
+    width: 48px; height: 48px; background: #dcfce7; border-radius: 14px;
+    display: flex; align-items: center; justify-content: center; font-size: 24px; flex-shrink: 0;
+  }
+  .pill-name { font-size: 20px; font-weight: 700; margin: 0 0 4px; }
+  .pill-note { font-size: 14px; color: #64748b; margin: 0; line-height: 1.45; }
+  .doses { display: flex; gap: 10px; flex-wrap: wrap; }
+  .dose-btn {
+    flex: 1; min-width: 100px; background: #22c55e; color: white; border: none;
+    border-radius: 14px; padding: 14px 8px; font-size: 15px; font-weight: 600; cursor: pointer;
+  }
+  .dose-taken {
+    flex: 1; min-width: 100px; background: #dcfce7; color: #166534;
+    border-radius: 14px; padding: 14px 8px; font-size: 14px; font-weight: 600; text-align: center;
+  }
+  .dose-taken small { display: block; font-weight: 500; font-size: 12px; }
+  .dose-control { margin-top: 12px; display: flex; align-items: center; gap: 10px; }
+  .dose-control input { width: 80px; padding: 8px; border-radius: 8px; border: 1px solid #cbd5e1; }
+  .total { font-weight: 600; color: #166534; margin-top: 8px; }
+  .section-title { font-size: 13px; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.6px; margin: 32px 0 12px; }
+  .history-item {
+    background: white; border-radius: 14px; padding: 14px 16px; margin-bottom: 8px;
+    font-size: 15px; display: flex; justify-content: space-between; align-items: center;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+  }
+  .history-time { color: #16a34a; font-weight: 600; }
+  .empty { color: #94a3b8; text-align: center; padding: 24px; font-size: 15px; }
+  .view { display: none; }
+  .view.active { display: block; }
+  .reminder-note { background: #eff6ff; border-radius: 14px; padding: 14px 16px; margin-top: 24px; font-size: 14px; color: #1e40af; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Today's Pills</h1>
+  <div class="date" id="dateDisplay"></div>
+  <div class="tabs">
+    <button class="tab active" onclick="showView('today')">Today</button>
+    <button class="tab" onclick="showView('week')">Week</button>
+    <button class="tab" onclick="showView('month')">Month</button>
+  </div>
+  <div id="view-today" class="view active">
+    <div id="pillsList"></div>
+    <div class="section-title">Today's Log</div>
+    <div id="historyList"></div>
+  </div>
+  <div id="view-week" class="view">
+    <div id="weekLog"></div>
+  </div>
+  <div id="view-month" class="view">
+    <div id="monthLog"></div>
+  </div>
+  <div class="reminder-note">
+    <strong>Reminders:</strong> The app checks time windows while open and can notify ~30 min before the end. For reliable lock-screen alerts, also set them in your phone’s Clock app.
+  </div>
+</div>
+
+<script>
+const MEDS = [
+  { id: "magnesium", name: "Magnesium", doses: 3, note: "Any time of day", icon: "💊" },
+  { id: "inositol", name: "Inositol (B8)", doses: 3, note: "Any time of day", icon: "🌿", dosageMg: 300 },
+  { id: "bicalina", name: "Bicalina", doses: 1, note: "Between 18:00 – 20:00", icon: "⏰", windowEnd: 20 },
+  { id: "omega", name: "Omega-3", doses: 2, note: "With fatty food • 10:00–16:00<br><strong>Include Vitamin D and K with this in your food</strong>", icon: "🐟", windowEnd: 16 }
+];
+
+let currentDosage = parseInt(localStorage.getItem("inositolDosage") || "0") || 300;
+
+function getTodayKey() { return new Date().toISOString().slice(0, 10); }
+function loadData(dateKey = getTodayKey()) {
+  try { return JSON.parse(localStorage.getItem("pillLog_" + dateKey)) || {}; }
+  catch { return {}; }
+}
+function saveData(data, dateKey = getTodayKey()) { localStorage.setItem("pillLog_" + dateKey, JSON.stringify(data)); }
+function loadHistory() {
+  try { return JSON.parse(localStorage.getItem("pillHistory")) || []; }
+  catch { return []; }
+}
+function saveHistory(entry) {
+  let history = loadHistory();
+  history.unshift(entry);
+  localStorage.setItem("pillHistory", JSON.stringify(history.slice(0, 200)));
+}
+function formatTime(date) { return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }); }
+
+function showView(name) {
+  document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
+  document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+  document.getElementById("view-" + name).classList.add("active");
+  event.target.classList.add("active");
+  if (name === "week") renderWeek();
+  if (name === "month") renderMonth();
+}
+
+function render() {
+  const data = loadData();
+  const list = document.getElementById("pillsList");
+  list.innerHTML = "";
+  MEDS.forEach(med => {
+    const takenTimes = data[med.id] || [];
+    const card = document.createElement("div");
+    card.className = "pill-card";
+    let dosageHtml = "";
+    if (med.id === "inositol") {
+      const takenCount = takenTimes.filter(Boolean).length;
+      const totalGrams = (takenCount * currentDosage / 1000).toFixed(2);
+      dosageHtml = `
+        <div class="dose-control">
+          <label>mg per dose:</label>
+          <input type="number" value="${currentDosage}" min="50" step="50" onchange="updateDosage(this.value)" placeholder="e.g. 300">
+          <span>mg</span>
+        </div>
+        <div class="total">Taken ${takenCount} times → Total today: ${totalGrams} g</div>
+      `;
+    }
+    card.innerHTML = `
+      <div class="pill-header">
+        <div class="pill-icon">${med.icon}</div>
+        <div>
+          <div class="pill-name">${med.name}</div>
+          <p class="pill-note">${med.note}</p>
+        </div>
+      </div>
+      <div class="doses" id="doses-${med.id}"></div>
+      ${dosageHtml}
+    `;
+    list.appendChild(card);
+    const dosesDiv = document.getElementById(`doses-${med.id}`);
+    for (let i = 0; i < med.doses; i++) {
+      const time = takenTimes[i];
+      if (time) {
+        const el = document.createElement("div");
+        el.className = "dose-taken";
+        el.innerHTML = `Taken<small>${time}</small>`;
+        dosesDiv.appendChild(el);
+      } else {
+        const btn = document.createElement("button");
+        btn.className = "dose-btn";
+        btn.textContent = "Taken";
+        btn.onclick = () => markTaken(med, i);
+        dosesDiv.appendChild(btn);
+      }
+    }
+  });
+  renderHistory();
+}
+
+function updateDosage(val) {
+  currentDosage = parseInt(val) || 300;
+  localStorage.setItem("inositolDosage", currentDosage);
+  render();
+}
+
+function markTaken(med, doseIndex) {
+  const now = new Date();
+  const timeStr = formatTime(now);
+  const data = loadData();
+  if (!data[med.id]) data[med.id] = [];
+  data[med.id][doseIndex] = timeStr;
+  saveData(data);
+  saveHistory({ name: med.name, dose: doseIndex + 1, time: timeStr, date: getTodayKey(), dosage: med.id === "inositol" ? currentDosage : null });
+  render();
+}
+
+function renderHistory() {
+  const history = loadHistory().filter(h => h.date === getTodayKey());
+  const el = document.getElementById("historyList");
+  el.innerHTML = history.length === 0
+    ? '<div class="empty">No pills logged yet today</div>'
+    : history.map(h => `<div class="history-item"><span>${h.name} (dose ${h.dose}${h.dosage ? ` · ${h.dosage}mg` : ""})</span><span class="history-time">${h.time}</span></div>`).join("");
+}
+
+function getDateRange(days) {
+  const dates = [];
+  for (let i = 0; i < days; i++) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    dates.push(d.toISOString().slice(0, 10));
+  }
+  return dates;
+}
+
+function renderWeek() {
+  const dates = getDateRange(7);
+  const history = loadHistory();
+  let html = "";
+  dates.forEach(date => {
+    const dayHist = history.filter(h => h.date === date);
+    const label = new Date(date).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+    html += `<div class="section-title">${label}</div>`;
+    if (dayHist.length === 0) html += '<div class="empty">Nothing logged</div>';
+    else html += dayHist.map(h => `<div class="history-item"><span>${h.name} (dose ${h.dose})</span><span class="history-time">${h.time}</span></div>`).join("");
+  });
+  document.getElementById("weekLog").innerHTML = html;
+}
+
+function renderMonth() {
+  const dates = getDateRange(30);
+  const history = loadHistory();
+  let html = "";
+  dates.forEach(date => {
+    const dayHist = history.filter(h => h.date === date);
+    if (dayHist.length === 0) return;
+    const label = new Date(date).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    html += `<div class="section-title">${label}</div>`;
+    html += dayHist.map(h => `<div class="history-item"><span>${h.name} (dose ${h.dose})</span><span class="history-time">${h.time}</span></div>`).join("");
+  });
+  document.getElementById("monthLog").innerHTML = html || '<div class="empty">No history yet</div>';
+}
+
+// Reminder check (while app is open)
+function checkReminders() {
+  if (Notification.permission !== "granted") return;
+  const now = new Date();
+  const hour = now.getHours();
+  const minute = now.getMinutes();
+  const data = loadData();
+
+  MEDS.forEach(med => {
+    if (!med.windowEnd) return;
+    const endHour = med.windowEnd;
+    const minutesLeft = (endHour * 60) - (hour * 60 + minute);
+    if (minutesLeft > 0 && minutesLeft <= 30) {
+      const taken = (data[med.id] || []).filter(Boolean).length;
+      if (taken < med.doses) {
+        new Notification(`${med.name} reminder`, { body: `About 30 minutes left in the window. Don’t forget!` });
+      }
+    }
+  });
+}
+
+if ("Notification" in window && Notification.permission === "default") {
+  Notification.requestPermission();
+}
+setInterval(checkReminders, 60 * 1000); // check every minute while open
+
+document.getElementById("dateDisplay").textContent = new Date().toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
+render();
+
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("sw.js").catch(() => {});
+}
+</script>
+</body>
+</html>
